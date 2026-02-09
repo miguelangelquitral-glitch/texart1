@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMU ART ENGINE - SECURE SHARE</title>
+    <style>
+        :root { --accent: #00ff95; --bg: #05070a; --btn: #1a1f26; --txt: #e6edf3; }
+        body { background: var(--bg); color: var(--txt); font-family: sans-serif; text-align: center; padding: 15px; margin: 0; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 500px; }
+        h1 { color: var(--accent); font-size: 1.5rem; margin-bottom: 10px; text-shadow: 0 0 10px rgba(0,255,149,0.3); }
+        textarea { width: 100%; height: 60px; padding: 12px; margin-bottom: 12px; border: 1px solid #3b434e; border-radius: 8px; background: #161b22; color: #fff; box-sizing: border-box; font-size: 1rem; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin-bottom: 15px; }
+        button, .upload-label { padding: 16px; font-weight: bold; border-radius: 10px; border: none; cursor: pointer; color: #fff; background: var(--btn); font-size: 0.85rem; transition: 0.3s; }
+        #genBtn { background: #238636; grid-column: span 2; border: 1px solid #3fb950; }
+        #saveBtn { background: #8957e5; }
+        #shareBtn { background: #005fb8; grid-column: span 2; border: 1px solid #0078d4; }
+        #shareBtn:disabled { background: #1a1f26; color: #4d555f; border: none; opacity: 0.6; }
+        .upload-label { background: #d29922; display: flex; align-items: center; justify-content: center; }
+        canvas { width: 100%; border: 2px solid #30363d; border-radius: 15px; background: #000; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+        #status { color: var(--accent); margin-top: 15px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+        input[type="file"] { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SMU ART GENERATOR</h1>
+        <textarea id="tInput" placeholder="Mensaje para el Mandala..."></textarea>
+        <div class="controls">
+            <button id="genBtn">GENERAR ARTE SMU</button>
+            <button id="saveBtn" disabled>GUARDAR PNG</button>
+            <label for="fInput" class="upload-label">CARGAR Y DECODIFICAR</label>
+            <input type="file" id="fInput" accept="image/png">
+            <button id="shareBtn" disabled>ENVIAR COMO DOCUMENTO</button>
+        </div>
+        <canvas id="canvas" width="700" height="700"></canvas>
+        <div id="status">SISTEMA SMU LISTO</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const tInput = document.getElementById('tInput');
+        const genBtn = document.getElementById('genBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const shareBtn = document.getElementById('shareBtn');
+        const fInput = document.getElementById('fInput');
+        const status = document.getElementById('status');
+
+        genBtn.onclick = () => {
+            if(!tInput.value) return status.textContent = "ESCRIBE UN MENSAJE";
+            status.textContent = "CONSTRUYENDO PIEZA ÚNICA...";
+            
+            setTimeout(() => {
+                const dataArray = Array.from(tInput.value).map(c => c.charCodeAt(0));
+                const seed = Date.now();
+                drawSMU(dataArray, seed);
+                saveBtn.disabled = false;
+                shareBtn.disabled = false;
+                status.textContent = "MANDALA GENERADO CON ÉXITO";
+            }, 50);
+        };
+
+        function drawSMU(textData, seed) {
+            const size = 700;
+            const imgData = ctx.createImageData(size, size);
+            const d = imgData.data;
+            const style = seed % 3;
+
+            for (let i = 0; i < size * size; i++) {
+                const p = i * 4;
+                const x = i % size;
+                const y = Math.floor(i / size);
+
+                // ZONA DE DATOS SMU (Identificador 160)
+                if (x < 40 && y < 40) {
+                    const idx = y * 40 + x;
+                    if (idx < textData.length) {
+                        d[p] = 160; d[p+1] = textData[idx]; d[p+2] = 255 - textData[idx]; d[p+3] = 255;
+                        continue;
+                    }
+                }
+
+                const dx = (x - 350) / 350;
+                const dy = (y - 350) / 350;
+                let r=0, g=0, b=0;
+
+                if (style === 0) { // FRACTAL DE JULIA
+                    let zx = 1.5 * dx, zy = dy;
+                    let iter = 0;
+                    const cx = -0.7 + (seed % 50)/500, cy = 0.27 + (seed % 30)/1000;
+                    while(zx*zx + zy*zy < 4 && iter < 32) {
+                        let t = zx*zx - zy*zy + cx;
+                        zy = 2*zx*zy + cy; zx = t; iter++;
+                    }
+                    r = (iter * 15 + seed % 100) % 255;
+                    g = (iter * 10 + seed % 200) % 255;
+                    b = (iter * 25) % 255;
+                } else { // ESTRELLA GEOMÉTRICA
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    const angle = Math.atan2(dy, dx);
+                    const rays = 6 + (seed % 6);
+                    const pulse = Math.sin(angle * rays + (seed/1000));
+                    if(dist < 0.8 + 0.1 * pulse) {
+                        r = 127 + 127 * Math.sin(dist * 10);
+                        g = 100 + 155 * Math.abs(pulse);
+                        b = 200;
+                    }
+                }
+                d[p] = r; d[p+1] = g; d[p+2] = b; d[p+3] = 255;
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        saveBtn.onclick = () => {
+            const link = document.createElement('a');
+            link.download = `SMU_ART_${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        };
+
+        // FUNCIÓN DE COMPARTIR NATIVA (Para evitar conversión a JPG)
+        shareBtn.onclick = async () => {
+            status.textContent = "PREPARANDO ARCHIVO PARA ENVÍO...";
+            canvas.toBlob(async (blob) => {
+                const file = new File([blob], `SMU_DOCUMENT_${Date.now()}.png`, { type: 'image/png' });
+                
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    try {
+                        await navigator.share({
+                            files: [file],
+                            title: 'Mandala SMU',
+                            text: 'IMPORTANTE: Envía como DOCUMENTO para mantener la seguridad.'
+                        });
+                        status.textContent = "SISTEMA DE COMPARTIR ABIERTO";
+                    } catch (err) {
+                        status.textContent = "ERROR AL COMPARTIR";
+                    }
+                } else {
+                    alert("Tu dispositivo no permite compartir archivos directamente. Usa el botón GUARDAR.");
+                }
+            }, 'image/png');
+        };
+
+        fInput.onchange = (e) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0);
+                    const d = ctx.getImageData(0,0,700,700).data;
+                    let res = "";
+                    for(let i=0; i<1600; i++) {
+                        if(d[i*4] === 160) res += String.fromCharCode(d[i*4+1]);
+                    }
+                    tInput.value = res;
+                    status.textContent = "MENSAJE DECODIFICADO";
+                };
+                img.src = ev.target.result;
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        };
+    </script>
+</body>
+</html>
